@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NButton, NSpin } from 'naive-ui'
+import { NButton, NSpin, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import ProvidersPanel from '@/components/hermes/models/ProvidersPanel.vue'
 import ProviderFormModal from '@/components/hermes/models/ProviderFormModal.vue'
@@ -12,6 +12,8 @@ const { t } = useI18n()
 const modelsStore = useModelsStore()
 const appStore = useAppStore()
 const showModal = ref(false)
+const refreshing = ref(false)
+const message = useMessage()
 
 onMounted(async () => {
   // 先 invalidate 后端 copilot 缓存（gh logout / VS Code 退出后下一次 list 立刻反映），
@@ -33,12 +35,39 @@ async function handleSaved() {
   appStore.loadModels()
   handleModalClose()
 }
+
+async function handleRefresh() {
+  refreshing.value = true
+  try {
+    await modelsStore.refreshModels()
+    await appStore.loadModels()
+    message.success(t('models.refreshSuccess'))
+  } catch (e: any) {
+    message.error(e.message || t('models.refreshFailed'))
+  } finally {
+    refreshing.value = false
+  }
+}
 </script>
 
 <template>
   <div class="models-view">
     <header class="page-header">
       <h2 class="header-title">{{ t('models.title') }}</h2>
+      <NButton
+        quaternary
+        size="small"
+        :loading="refreshing"
+        @click="handleRefresh"
+      >
+        <template #icon>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        </template>
+        {{ t('models.refreshModels') }}
+      </NButton>
       <NButton type="primary" size="small" @click="openCreateModal">
         <template #icon>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

@@ -613,6 +613,9 @@ export default {
     unexpectedFormat: '响应格式异常',
     foundModels: '找到 {count} 个模型',
     fetchFailed: '获取模型失败',
+    refreshModels: '刷新模型列表',
+    refreshSuccess: '模型列表已刷新',
+    refreshFailed: '刷新模型列表失败',
   },
 
   // 配置

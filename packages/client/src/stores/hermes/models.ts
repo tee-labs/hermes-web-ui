@@ -48,6 +48,23 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
+  async function refreshModels() {
+    if (!hasApiKey()) return
+    loading.value = true
+    try {
+      const res = await systemApi.fetchRefreshModels()
+      providers.value = res.groups
+      allProviders.value = res.allProviders
+      defaultModel.value = res.default
+      const appStore = useAppStore()
+      appStore.applyAvailableModelsResponse(res)
+    } catch (err) {
+      console.error('Failed to refresh models:', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function setDefaultModel(modelId: string, provider: string) {
     await systemApi.updateDefaultModel({ default: modelId, provider })
     defaultModel.value = modelId
@@ -78,6 +95,7 @@ export const useModelsStore = defineStore('models', () => {
     builtinProviders,
     allModels,
     fetchProviders,
+    refreshModels,
     setDefaultModel,
     addProvider,
     removeProvider,
