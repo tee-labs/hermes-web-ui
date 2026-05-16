@@ -11,7 +11,7 @@ const props = defineProps<{
   exclusive?: boolean
 }>()
 
-const expanded = ref(true)
+const expanded = ref(false)
 const { t } = useI18n()
 
 const configured = computed(() => {
