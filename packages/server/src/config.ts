@@ -14,6 +14,8 @@ import { homedir } from 'os'
  * - HERMES_WEBUI_STATE_DIR: Compatibility alias for HERMES_WEB_UI_HOME.
  *   Default: join(homedir(), '.hermes-web-ui').
  * - UPLOAD_DIR: Upload directory override. Default: join(HERMES_WEB_UI_HOME, 'upload').
+ * - HERMES_WEB_UI_DATA_DIR: Data directory for runtime state. Default: join(HERMES_WEB_UI_HOME, 'data').
+ *   Previously hardcoded to resolve(__dirname, '..', 'data') which broke under global npm install (EACCES).
  *
  * Auth:
  * - AUTH_DISABLED: Set to 1 or true to disable Web UI auth.
@@ -50,6 +52,8 @@ export const config = {
   host: getListenHost(),
   appHome,
   uploadDir: process.env.UPLOAD_DIR || join(appHome, 'upload'),
-  dataDir: resolve(__dirname, '..', 'data'),
+  dataDir: process.env.HERMES_WEB_UI_DATA_DIR?.trim()
+    ? resolve(process.env.HERMES_WEB_UI_DATA_DIR)
+    : join(appHome, 'data'),
   corsOrigins: process.env.CORS_ORIGINS || '*',
 }
