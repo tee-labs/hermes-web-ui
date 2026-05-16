@@ -3,12 +3,15 @@ import { existsSync, readFileSync } from 'fs'
 import { getActiveEnvPath, getActiveAuthPath } from '../../services/hermes/hermes-profile'
 import { readConfigYaml, writeConfigYaml, fetchProviderModels, buildModelGroups, PROVIDER_ENV_MAP } from '../../services/config-helpers'
 import { buildProviderModelMap, PROVIDER_PRESETS } from '../../shared/providers'
-import { getCopilotModelsDetailed, resolveCopilotOAuthToken, type CopilotModelMeta } from '../../services/hermes/copilot-models'
+import { getCopilotModelsDetailed, resolveCopilotOAuthToken, invalidateAllCaches, type CopilotModelMeta } from '../../services/hermes/copilot-models'
 import { readAppConfig, writeAppConfig, type ModelVisibilityRule } from '../../services/app-config'
 import { getDb } from '../../db'
 import { MODEL_CONTEXT_TABLE } from '../../db/hermes/schemas'
 
 const PROVIDER_MODEL_CATALOG = buildProviderModelMap()
+
+/** 请求间缓存：刷新成功后保存的模型列表，避免重新进入页面或保存可见性时回退到静态目录 */
+const refreshedModelCache = new Map<string, string[]>()
 
 type ModelMeta = { preview?: boolean; disabled?: boolean; alias?: string }
 type AvailableGroup = { provider: string; label: string; base_url: string; models: string[]; api_key: string; builtin?: boolean; model_meta?: Record<string, ModelMeta>; available_models?: string[] }
@@ -188,10 +191,29 @@ export async function getAvailable(ctx: any) {
           provider?.access_token ||
           (Array.isArray(pool) && pool.some((entry: any) => entry?.access_token))
         )
-      } catch { return false }
-    }
+    } catch { return false }
+  }
 
-    // 同一请求内复用 copilot 动态模型（getCopilotModelsDetailed 内部有 inflight + 缓存，
+  /** Get OAuth access token from auth.json for a provider. */
+  const getOAuthToken = (providerKey: string): string => {
+    try {
+      const authPath = getActiveAuthPath()
+      if (!existsSync(authPath)) return ''
+      const auth = JSON.parse(readFileSync(authPath, 'utf-8'))
+      const provider = auth.providers?.[providerKey]
+      const pool = auth.credential_pool?.[providerKey]
+      const token = provider?.tokens?.access_token || provider?.access_token || ''
+      if (token) return token
+      if (Array.isArray(pool)) {
+        for (const entry of pool) {
+          if (entry?.access_token) return entry.access_token
+        }
+      }
+    } catch { /* ignore */ }
+    return ''
+  }
+
+  // 同一请求内复用 copilot 动态模型（getCopilotModelsDetailed 内部有 inflight + 缓存，
     // 这里再缓存到局部变量进一步减少分支）
     let copilotLiveModels: CopilotModelMeta[] | null = null
     const getCopilotLive = async (): Promise<CopilotModelMeta[]> => {
@@ -298,6 +320,51 @@ export async function getAvailable(ctx: any) {
     }
 
     for (const g of groups) { g.models = Array.from(new Set(g.models)) }
+
+    // 应用缓存的刷新结果（如果有），使重新进入页面 / 保存可见性后仍保留刷新数据
+    for (const g of groups) {
+      const cached = refreshedModelCache.get(g.provider)
+      if (cached && cached.length > 0) {
+        g.models = cached
+        g.available_models = [...cached]
+      }
+    }
+
+    // 可选：从实时端点刷新所有已启用 provider 的模型列表（?refresh=true）
+    if (ctx.query.refresh === 'true') {
+      // 清空 copilot 缓存，确保下次拉取走网络
+      invalidateAllCaches()
+      for (const g of groups) {
+        if (g.provider === 'copilot') {
+          // Copilot 走专用拉取逻辑
+          try {
+            const fresh = await getCopilotLive()
+            if (fresh.length > 0) {
+              const ids = fresh.map(m => m.id)
+              g.models = ids
+              g.available_models = ids
+              refreshedModelCache.set(g.provider, ids)
+            }
+          } catch { /* keep existing */ }
+        } else {
+          let token = g.api_key
+          if (!token) {
+            token = getOAuthToken(g.provider)
+          }
+          if (token && g.base_url) {
+            try {
+              const fresh = await fetchProviderModels(g.base_url, token)
+              if (fresh.length > 0) {
+                g.models = fresh
+                g.available_models = [...fresh]
+                refreshedModelCache.set(g.provider, fresh)
+              }
+            } catch { /* keep existing */ }
+          }
+        }
+      }
+    }
+
     const groupsWithAliases = applyModelAliases(groups, modelAliases)
     const visibleGroups = applyModelVisibility(groupsWithAliases, modelVisibility)
     const visibleDefault = resolveVisibleDefault(currentDefault, currentDefaultProvider, visibleGroups)

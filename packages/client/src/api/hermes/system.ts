@@ -80,6 +80,11 @@ export async function fetchAvailableModels(): Promise<AvailableModelsResponse> {
   return request<AvailableModelsResponse>('/api/hermes/available-models')
 }
 
+/** 强制刷新所有已启用 provider 的模型列表（调用 provider 的 /v1/models 实时端点） */
+export async function fetchRefreshModels(): Promise<AvailableModelsResponse> {
+  return request<AvailableModelsResponse>('/api/hermes/available-models?refresh=true')
+}
+
 export async function updateDefaultModel(data: {
   default: string
   provider?: string

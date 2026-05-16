@@ -613,6 +613,9 @@ export default {
     unexpectedFormat: 'Unexpected response format',
     foundModels: 'Found {count} models',
     fetchFailed: 'Failed to fetch models',
+    refreshModels: 'Refresh model list',
+    refreshSuccess: 'Model list refreshed',
+    refreshFailed: 'Failed to refresh model list',
   },
 
   // Profiles
